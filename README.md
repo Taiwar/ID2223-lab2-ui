@@ -1,5 +1,5 @@
 ---
-title: Gradio Chatbot
+title: Iris
 emoji: 💬
 colorFrom: yellow
 colorTo: purple
