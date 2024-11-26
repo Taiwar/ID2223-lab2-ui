@@ -1,10 +1,19 @@
+import os
+
 import gradio as gr
 from huggingface_hub import InferenceClient
+
+
+model_name = "Taiwar/lab2_lora_model-200steps_vllm"
 
 """
 For more information on `huggingface_hub` Inference API support, please check the docs: https://huggingface.co/docs/huggingface_hub/v0.22.2/en/guides/inference
 """
-client = InferenceClient("HuggingFaceH4/zephyr-7b-beta")
+hf_token = os.getenv('hf_token')
+if hf_token is None:
+    print("Reading hf_token from .hftoken file")
+    hf_token = open(".hftoken").read().strip()
+client = InferenceClient(model=model_name, token=hf_token)
 
 
 def respond(
