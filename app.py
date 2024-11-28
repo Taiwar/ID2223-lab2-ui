@@ -4,6 +4,7 @@ from datetime import datetime
 import gradio as gr
 import pandas as pd
 from llama_cpp import Llama
+import copy
 
 model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
 
@@ -76,7 +77,7 @@ def respond(
     #     top_p=top_p,
     # )
 
-    text_streamer = model.create_chat_completion(
+    text_streamer  = model.create_chat_completion(
         messages=messages,
         max_tokens=max_tokens,
         temperature=temperature,
@@ -86,7 +87,9 @@ def respond(
 
     response = ""
     for token in text_streamer:
-        response += token
+        t = copy.deepcopy(token)
+        print("Model response:", t)
+        response += t["choices"][0]["text"]
         yield response
 
 """
