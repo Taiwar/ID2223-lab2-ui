@@ -90,10 +90,12 @@ def respond(
     response = ""
     for token in text_streamer:
         print("Model response:", token)
-        if "text" in token["choices"][0]:
-            response += token["choices"][0]["text"]
+        if "delta" in token["choices"][0]:
+            delta = token["choices"][0]["delta"]
+            if "content" in delta:
+                response += delta["content"]
         else:
-            response += str(token["choices"][0])
+            print("Unexpected token:", token)
         yield response
 
 """
