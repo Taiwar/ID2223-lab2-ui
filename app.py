@@ -11,7 +11,7 @@ model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
 model = Llama.from_pretrained(
     repo_id=model_name,
     filename="llama-3.2-1b-instruct-lora_merged-1epoch-16b.gguf",
-    # verbose=False,
+    verbose=False,
     # chat_format="llama-3"
 )
 
@@ -43,6 +43,7 @@ def respond(
     max_tokens,
     temperature,
     top_p,
+    repeat_penalty
 ):
     # Extract date from the message (assuming the date is provided in the message)
     import re
@@ -85,6 +86,7 @@ def respond(
         temperature=temperature,
         top_p=top_p,
         stream=True,
+        repeat_penalty=repeat_penalty
     )
 
     response = ""
@@ -113,6 +115,13 @@ demo = gr.ChatInterface(
             value=0.95,
             step=0.05,
             label="Top-p (nucleus sampling)",
+        ),
+        gr.Slider(
+            minimum=0.0,
+            maximum=2.0,
+            value=1.0,
+            step=0.1,
+            label="Repeat penalty",
         ),
     ],
 )
