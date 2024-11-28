@@ -3,25 +3,22 @@ from datetime import datetime
 
 import gradio as gr
 import pandas as pd
-from transformers import AutoTokenizer, TextStreamer
-from peft import AutoPeftModelForCausalLM
+from llama_cpp import Llama
 
 model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
-load_in_4bit = True
 
-"""
-For more information on `huggingface_hub` Inference API support, please check the docs: https://huggingface.co/docs/huggingface_hub/v0.22.2/en/guides/inference
-"""
+model = Llama.from_pretrained(
+    repo_id=model_name,
+    filename="llama-3.2-1b-instruct-lora_merged-1epoch-16b.gguf",
+    verbose=False,
+    chat_format="llama-3"
+)
+
 hf_token = os.getenv('hf_token')
 if hf_token is None:
     print("Reading hf_token from .hftoken file")
     hf_token = open(".hftoken").read().strip()
 
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoPeftModelForCausalLM.from_pretrained(
-    model_name,
-    load_in_4bit = load_in_4bit,
-)
 
 def load_context():
     _aq_predictions = pd.read_csv("data/aq_predictions.csv")
@@ -70,25 +67,23 @@ def respond(
 
     messages.append({"role": "user", "content": message})
 
-    inputs = tokenizer.apply_chat_template(
-        messages,
-        tokenize=True,
-        add_generation_prompt=True,
-        return_tensors="pt",
-    )
+    # _ = model.generate(
+    #     input_ids=inputs,
+    #     streamer=text_streamer,
+    #     max_new_tokens=max_tokens,
+    #     use_cache=True,
+    #     temperature=temperature,
+    #     top_p=top_p,
+    # )
 
-    text_streamer = TextStreamer(tokenizer, skip_prompt=True)
-
-    _ = model.generate(
-        input_ids=inputs,
-        streamer=text_streamer,
-        max_new_tokens=max_tokens,
-        use_cache=True,
+    text_streamer = model.create_chat_completion(
+        messages=messages,
+        max_tokens=max_tokens,
         temperature=temperature,
         top_p=top_p,
+        stream=True,
     )
 
-    # Yield the tokens as they are generated
     response = ""
     for token in text_streamer:
         response += token
