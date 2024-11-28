@@ -3,10 +3,14 @@ from datetime import datetime
 
 import gradio as gr
 import pandas as pd
-from huggingface_hub import InferenceClient
+from transformers import AutoModel, AutoTokenizer, TextStreamer
+from unsloth import FastLanguageModel
 
 
-model_name = "meta-llama/Meta-Llama-3-8B-Instruct"
+model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
+max_seq_length = 2048
+dtype = None
+load_in_4bit = True
 
 """
 For more information on `huggingface_hub` Inference API support, please check the docs: https://huggingface.co/docs/huggingface_hub/v0.22.2/en/guides/inference
@@ -15,7 +19,15 @@ hf_token = os.getenv('hf_token')
 if hf_token is None:
     print("Reading hf_token from .hftoken file")
     hf_token = open(".hftoken").read().strip()
-client = InferenceClient(model=model_name, token=hf_token)
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name=model_name,
+    max_seq_length=max_seq_length,
+    dtype=dtype,
+    load_in_4bit=load_in_4bit
+)
+
+model = FastLanguageModel.for_inference(model)
 
 def load_context():
     _aq_predictions = pd.read_csv("data/aq_predictions.csv")
@@ -68,17 +80,27 @@ def respond(
 
     messages.append({"role": "user", "content": message})
 
-    response = ""
-
-    for message in client.chat_completion(
+    inputs = tokenizer.apply_chat_template(
         messages,
-        max_tokens=max_tokens,
-        stream=True,
-        temperature=temperature,
-        top_p=top_p,
-    ):
-        token = message.choices[0].delta.content
+        tokenize=True,
+        add_generation_prompt=True,  # Must add for generation
+        return_tensors="pt",
+    )
 
+    text_streamer = TextStreamer(tokenizer, skip_prompt=True)
+
+    _ = model.generate(
+        input_ids=inputs,
+        streamer=text_streamer,
+        max_new_tokens=max_tokens,
+        use_cache=True,
+        temperature=temperature,
+        min_p=top_p,
+    )
+
+    # Yield the tokens as they are generated
+    response = ""
+    for token in text_streamer:
         response += token
         yield response
 
