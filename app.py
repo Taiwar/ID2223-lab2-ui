@@ -32,7 +32,7 @@ def get_aq_prediction(date_str):
     date = datetime.strptime(date_str, '%Y-%m-%d').date()
     prediction = aq_predictions[aq_predictions['date'] == date]
     if not prediction.empty:
-        return prediction.to_dict(orient='records')[0]
+        return prediction['predicted_pm25'][0]
     else:
         return None
 
@@ -51,12 +51,12 @@ def respond(
         print("Matched date:", date_match.group(0))
         date = date_match.group(0)
         aq_prediction = get_aq_prediction(date)
-        system_message += f"\nYou were asked about the air quality prediction for {date}"
+        system_message += f"\nYou are helping users to retrieve air quality information. You were asked about the air quality prediction for {date}. Do not tell the user to look for the data elsewhere"
         if aq_prediction:
             print("Air quality prediction for", date, ":", aq_prediction)
-            system_message += f"\nThe air quality prediction for Reutlingen, Germany on {date}: {aq_prediction}"
+            system_message += f"\nRespond with a friendly answer that the air quality prediction in terms of PM2.5 value for Reutlingen, Germany on {date} was: {aq_prediction}"
         else:
-            system_message += f"\nNo air quality prediction available for {date}"
+            system_message += f"\nRespond with a friendly answer that there is no data for {date}"
 
     messages = [{"role": "system", "content": system_message}]
 
@@ -89,7 +89,7 @@ def respond(
 
     response = ""
     for token in text_streamer:
-        print("Model response:", token)
+        # print("Model response:", token)
         if "delta" in token["choices"][0]:
             delta = token["choices"][0]["delta"]
             if "content" in delta:
