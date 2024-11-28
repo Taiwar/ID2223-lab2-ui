@@ -3,9 +3,11 @@ from datetime import datetime
 
 import gradio as gr
 import pandas as pd
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
+from transformers import AutoTokenizer, TextStreamer
+from peft import AutoPeftModelForCausalLM
 
 model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
+load_in_4bit = True
 
 """
 For more information on `huggingface_hub` Inference API support, please check the docs: https://huggingface.co/docs/huggingface_hub/v0.22.2/en/guides/inference
@@ -16,7 +18,10 @@ if hf_token is None:
     hf_token = open(".hftoken").read().strip()
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
+model = AutoPeftModelForCausalLM.from_pretrained(
+    model_name,
+    load_in_4bit = load_in_4bit,
+)
 
 def load_context():
     _aq_predictions = pd.read_csv("data/aq_predictions.csv")
