@@ -3,14 +3,9 @@ from datetime import datetime
 
 import gradio as gr
 import pandas as pd
-from transformers import AutoModel, AutoTokenizer, TextStreamer
-from unsloth import FastLanguageModel
-
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextStreamer
 
 model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
-max_seq_length = 2048
-dtype = None
-load_in_4bit = True
 
 """
 For more information on `huggingface_hub` Inference API support, please check the docs: https://huggingface.co/docs/huggingface_hub/v0.22.2/en/guides/inference
@@ -20,21 +15,12 @@ if hf_token is None:
     print("Reading hf_token from .hftoken file")
     hf_token = open(".hftoken").read().strip()
 
-model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name=model_name,
-    max_seq_length=max_seq_length,
-    dtype=dtype,
-    load_in_4bit=load_in_4bit
-)
-
-model = FastLanguageModel.for_inference(model)
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
 
 def load_context():
     _aq_predictions = pd.read_csv("data/aq_predictions.csv")
-    # Transform date column from datetime to date
     _aq_predictions['date'] = pd.to_datetime(_aq_predictions['date']).dt.date
-    # Print the first 5 rows of the dataframe
-    print(_aq_predictions.head())
     return _aq_predictions
 
 aq_predictions = load_context()
@@ -46,7 +32,6 @@ def get_aq_prediction(date_str):
         return prediction.to_dict(orient='records')[0]
     else:
         return None
-
 
 def respond(
     message,
@@ -83,7 +68,7 @@ def respond(
     inputs = tokenizer.apply_chat_template(
         messages,
         tokenize=True,
-        add_generation_prompt=True,  # Must add for generation
+        add_generation_prompt=True,
         return_tensors="pt",
     )
 
@@ -95,7 +80,7 @@ def respond(
         max_new_tokens=max_tokens,
         use_cache=True,
         temperature=temperature,
-        min_p=top_p,
+        top_p=top_p,
     )
 
     # Yield the tokens as they are generated
@@ -103,7 +88,6 @@ def respond(
     for token in text_streamer:
         response += token
         yield response
-
 
 """
 For information on how to customize the ChatInterface, peruse the gradio docs: https://www.gradio.app/docs/chatinterface
@@ -123,7 +107,6 @@ demo = gr.ChatInterface(
         ),
     ],
 )
-
 
 if __name__ == "__main__":
     demo.launch()
