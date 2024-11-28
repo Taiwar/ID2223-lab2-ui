@@ -11,8 +11,8 @@ model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
 model = Llama.from_pretrained(
     repo_id=model_name,
     filename="llama-3.2-1b-instruct-lora_merged-1epoch-16b.gguf",
-    verbose=False,
-    chat_format="llama-3"
+    # verbose=False,
+    # chat_format="llama-3"
 )
 
 hf_token = os.getenv('hf_token')
@@ -77,6 +77,8 @@ def respond(
     #     top_p=top_p,
     # )
 
+    print("Messages:", messages)
+
     text_streamer  = model.create_chat_completion(
         messages=messages,
         max_tokens=max_tokens,
@@ -87,9 +89,11 @@ def respond(
 
     response = ""
     for token in text_streamer:
-        t = copy.deepcopy(token)
-        print("Model response:", t)
-        response += t["choices"][0]["text"]
+        print("Model response:", token)
+        if "text" in token["choices"][0]:
+            response += token["choices"][0]["text"]
+        else:
+            response += str(token["choices"][0])
         yield response
 
 """
