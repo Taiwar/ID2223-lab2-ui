@@ -32,7 +32,7 @@ def get_aq_prediction(date_str):
     date = datetime.strptime(date_str, '%Y-%m-%d').date()
     prediction = aq_predictions[aq_predictions['date'] == date]
     if not prediction.empty:
-        return prediction['predicted_pm25'][0]
+        return prediction['predicted_pm25'].iloc[0]
     else:
         return None
 
