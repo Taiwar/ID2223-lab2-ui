@@ -4,8 +4,32 @@ from datetime import datetime
 import gradio as gr
 import pandas as pd
 from llama_cpp import Llama
-import copy
+from openai import OpenAI
 
+
+def read_api_credentials():
+    credentials = {}
+    for key in ['model_api_key', 'model_api_url', 'hf_token']:
+        credentials[key] = os.getenv(key)
+        if credentials[key] is None:
+            print(f"Reading {key} from .{key} file")
+            credentials[key] = open(f".{key}").read().strip()
+    return credentials['model_api_key'], credentials['model_api_url'], credentials['hf_token']
+
+model_api_key, model_api_url, hf_token = read_api_credentials()
+
+def load_context():
+    _aq_predictions = pd.read_csv("data/aq_predictions.csv")
+    _aq_predictions['date'] = pd.to_datetime(_aq_predictions['date']).dt.date
+    return _aq_predictions
+
+# Init first model option: OpenAI API client for deployment running on modal with GPU
+client = OpenAI(
+    base_url=model_api_url,
+    api_key=model_api_key
+)
+
+# Init second model option: Running it locally with CPU
 model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
 
 model = Llama.from_pretrained(
@@ -14,17 +38,6 @@ model = Llama.from_pretrained(
     verbose=False,
     # chat_format="llama-3"
 )
-
-hf_token = os.getenv('hf_token')
-if hf_token is None:
-    print("Reading hf_token from .hftoken file")
-    hf_token = open(".hftoken").read().strip()
-
-
-def load_context():
-    _aq_predictions = pd.read_csv("data/aq_predictions.csv")
-    _aq_predictions['date'] = pd.to_datetime(_aq_predictions['date']).dt.date
-    return _aq_predictions
 
 aq_predictions = load_context()
 
@@ -39,6 +52,7 @@ def get_aq_prediction(date_str):
 def respond(
     message,
     history: list[tuple[str, str]],
+    model_type,
     system_message,
     max_tokens,
     temperature,
@@ -69,35 +83,33 @@ def respond(
 
     messages.append({"role": "user", "content": message})
 
-    # _ = model.generate(
-    #     input_ids=inputs,
-    #     streamer=text_streamer,
-    #     max_new_tokens=max_tokens,
-    #     use_cache=True,
-    #     temperature=temperature,
-    #     top_p=top_p,
-    # )
+    # print("Messages:", messages)
 
-    print("Messages:", messages)
+    if model_type == "local":
+        text_streamer  = model.create_chat_completion(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            stream=True,
+            repeat_penalty=repeat_penalty
+        )
 
-    text_streamer  = model.create_chat_completion(
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        top_p=top_p,
-        stream=True,
-        repeat_penalty=repeat_penalty
-    )
-
-    response = ""
-    for token in text_streamer:
-        # print("Model response:", token)
-        if "delta" in token["choices"][0]:
-            delta = token["choices"][0]["delta"]
-            if "content" in delta:
-                response += delta["content"]
-        else:
-            print("Unexpected token:", token)
+        response = ""
+        for token in text_streamer:
+            if "delta" in token["choices"][0]:
+                delta = token["choices"][0]["delta"]
+                if "content" in delta:
+                    response += delta["content"]
+            else:
+                print("Unexpected token:", token)
+            yield response
+    elif model_type == "remote":
+        chat_completion = client.chat.completions.create(
+            messages=messages,
+            model=model_name
+        )
+        response = chat_completion.choices[0].message.content
         yield response
 
 """
@@ -106,6 +118,11 @@ For information on how to customize the ChatInterface, peruse the gradio docs: h
 demo = gr.ChatInterface(
     respond,
     additional_inputs=[
+        gr.Dropdown(
+            choices=["local", "remote"],
+            value="local",
+            label="Model type"
+        ),
         gr.Textbox(value="You are a friendly Chatbot.", label="System message"),
         gr.Slider(minimum=1, maximum=2048, value=512, step=1, label="Max new tokens"),
         gr.Slider(minimum=0.1, maximum=4.0, value=0.7, step=0.1, label="Temperature"),
