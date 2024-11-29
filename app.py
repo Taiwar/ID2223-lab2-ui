@@ -23,17 +23,19 @@ def load_context():
     _aq_predictions['date'] = pd.to_datetime(_aq_predictions['date']).dt.date
     return _aq_predictions
 
+
 # Init first model option: OpenAI API client for deployment running on modal with GPU
+model_name_1 = "llama-3.2-1b-instruct-lora-1poch_merged16b"
 client = OpenAI(
     base_url=model_api_url,
     api_key=model_api_key
 )
 
 # Init second model option: Running it locally with CPU
-model_name = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
+model_name_2 = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
 
 model = Llama.from_pretrained(
-    repo_id=model_name,
+    repo_id=model_name_2,
     filename="llama-3.2-1b-instruct-lora_merged-1epoch-16b.gguf",
     verbose=False,
     # chat_format="llama-3"
@@ -107,7 +109,7 @@ def respond(
     elif model_type == "remote":
         chat_completion = client.chat.completions.create(
             messages=messages,
-            model=model_name
+            model=model_name_1
         )
         response = chat_completion.choices[0].message.content
         yield response
