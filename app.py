@@ -136,7 +136,11 @@ def respond(
     elif model_type == "remote":
         chat_completion = client.chat.completions.create(
             messages=messages,
-            model=model_name_1
+            model=model_name_1,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            frequency_penalty=repeat_penalty
         )
         response = chat_completion.choices[0].message.content
         yield response
