@@ -47,13 +47,18 @@ project = hopsworks.login()
 fs = project.get_feature_store()
 predictions_fg = fs.get_feature_group("aq_predictions")
 
+cache = {}
+
 def get_aq_predictions(backfill_days):
     # Get predictions from yesterday to the future
     today = datetime.now().date()
     backfill_day = today - pd.Timedelta(days=backfill_days)
+    if backfill_day in cache:
+        return cache[backfill_day]
     predictions_df = predictions_fg.filter(predictions_fg.date >= backfill_day).read()
     # For each date, there are multiple predictions. We only want the most recent one (lowest days_before_forecast_day)
     predictions_df = predictions_df.sort_values("days_before_forecast_day").groupby("date").first().reset_index()
+    cache[backfill_day] = predictions_df
     return predictions_df
 
 def format_predictions_for_llm(predictions_df):
@@ -80,17 +85,24 @@ def respond(
     message,
     history: list[tuple[str, str]],
     model_type,
-    system_message,
     max_tokens,
     temperature,
     top_p,
     repeat_penalty,
     backfill_days
 ):
+    system_message = "\nYou are a friendly Chatbot."
+    system_message += (
+        "\nYou help summarize and answer questions about air quality predictions."
+        "\nAnswer any questions about this data helpfully."
+        "\nDo not make predictions about dates not provided, only answer based on the data provided in the system messages."
+    )
     if do_hw_query:
         aq_prediction = get_aq_predictions(backfill_days)
-        system_message += f"\nAttached is the air quality prediction data was retrieved from a feature store. Answer any questions about this data helpfully: \n{format_predictions_for_llm(aq_prediction)}"
-
+        system_message += f"The following air quality data was retrieved: \n{format_predictions_for_llm(aq_prediction)}"
+    else:
+        aq_prediction = load_context()
+        system_message += f"The following air quality data was loaded from the cache: \n{format_predictions_for_llm(aq_prediction)}"
 
     messages = [{"role": "system", "content": system_message}]
 
@@ -140,7 +152,6 @@ demo = gr.ChatInterface(
             value="local",
             label="Model type"
         ),
-        gr.Textbox(value="You are a friendly Chatbot.", label="System message"),
         gr.Slider(minimum=1, maximum=2048, value=512, step=1, label="Max new tokens"),
         gr.Slider(minimum=0.1, maximum=4.0, value=0.7, step=0.1, label="Temperature"),
         gr.Slider(
