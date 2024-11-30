@@ -10,14 +10,14 @@ from openai import OpenAI
 
 def read_api_credentials():
     credentials = {}
-    for key in ['model_api_key', 'model_api_url', 'hf_token', 'hw_token']:
+    for key in ['model_api_key', 'model_api_url', 'hf_token', 'hw_token', 'do_hw_query']:
         credentials[key] = os.getenv(key)
         if credentials[key] is None:
             print(f"Reading {key} from .{key} file")
             credentials[key] = open(f".{key}").read().strip()
-    return credentials['model_api_key'], credentials['model_api_url'], credentials['hf_token'], credentials['hw_token']
+    return credentials['model_api_key'], credentials['model_api_url'], credentials['hf_token'], credentials['hw_token'], credentials['do_hw_query']
 
-model_api_key, model_api_url, hf_token, hw_token = read_api_credentials()
+model_api_key, model_api_url, hf_token, hw_token, do_hw_query = read_api_credentials()
 os.environ["HOPSWORKS_API_KEY"] = hw_token
 
 def load_context():
@@ -87,8 +87,9 @@ def respond(
     repeat_penalty,
     backfill_days
 ):
-    aq_prediction = get_aq_predictions(backfill_days)
-    system_message += f"\nAttached is the air quality prediction data was retrieved from a feature store. Answer any questions about this data helpfully: \n{format_predictions_for_llm(aq_prediction)}"
+    if do_hw_query:
+        aq_prediction = get_aq_predictions(backfill_days)
+        system_message += f"\nAttached is the air quality prediction data was retrieved from a feature store. Answer any questions about this data helpfully: \n{format_predictions_for_llm(aq_prediction)}"
 
 
     messages = [{"role": "system", "content": system_message}]
