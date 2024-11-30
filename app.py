@@ -99,9 +99,11 @@ def respond(
     )
     if do_hw_query:
         aq_prediction = get_aq_predictions(backfill_days)
+        aq_prediction = aq_prediction.head(7) # Basic limit to tokens
         system_message += f"The following air quality data was retrieved: \n{format_predictions_for_llm(aq_prediction)}"
     else:
         aq_prediction = load_context()
+        aq_prediction = aq_prediction.head(7) # Basic limit to tokens
         system_message += f"The following air quality data was loaded from the cache: \n{format_predictions_for_llm(aq_prediction)}"
 
     messages = [{"role": "system", "content": system_message}]
