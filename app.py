@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 
 import gradio as gr
+import hopsworks
 import pandas as pd
 from llama_cpp import Llama
 from openai import OpenAI
@@ -9,14 +10,15 @@ from openai import OpenAI
 
 def read_api_credentials():
     credentials = {}
-    for key in ['model_api_key', 'model_api_url', 'hf_token']:
+    for key in ['model_api_key', 'model_api_url', 'hf_token', 'hw_token']:
         credentials[key] = os.getenv(key)
         if credentials[key] is None:
             print(f"Reading {key} from .{key} file")
             credentials[key] = open(f".{key}").read().strip()
-    return credentials['model_api_key'], credentials['model_api_url'], credentials['hf_token']
+    return credentials['model_api_key'], credentials['model_api_url'], credentials['hf_token'], credentials['hw_token']
 
-model_api_key, model_api_url, hf_token = read_api_credentials()
+model_api_key, model_api_url, hf_token, hw_token = read_api_credentials()
+os.environ["HOPSWORKS_API_KEY"] = hw_token
 
 def load_context():
     _aq_predictions = pd.read_csv("data/aq_predictions.csv")
@@ -41,15 +43,38 @@ model = Llama.from_pretrained(
     # chat_format="llama-3"
 )
 
-aq_predictions = load_context()
+project = hopsworks.login()
+fs = project.get_feature_store()
+predictions_fg = fs.get_feature_group("aq_predictions")
 
-def get_aq_prediction(date_str):
-    date = datetime.strptime(date_str, '%Y-%m-%d').date()
-    prediction = aq_predictions[aq_predictions['date'] == date]
-    if not prediction.empty:
-        return prediction['predicted_pm25'].iloc[0]
-    else:
-        return None
+def get_aq_predictions(backfill_days):
+    # Get predictions from yesterday to the future
+    today = datetime.now().date()
+    backfill_day = today - pd.Timedelta(days=backfill_days)
+    predictions_df = predictions_fg.filter(predictions_fg.date >= backfill_day).read()
+    # For each date, there are multiple predictions. We only want the most recent one (lowest days_before_forecast_day)
+    predictions_df = predictions_df.sort_values("days_before_forecast_day").groupby("date").first().reset_index()
+    return predictions_df
+
+def format_predictions_for_llm(predictions_df):
+    formatted_rows = []
+    for _, row in predictions_df.iterrows():
+        formatted_row = (
+            f"Date: {row['date']}, "
+            f"Temperature: {row['temperature_2m_mean']}°C, "
+            f"Precipitation: {row['precipitation_sum']}mm, "
+            f"Wind Speed: {row['wind_speed_10m_max']}m/s, "
+            f"Wind Direction: {row['wind_direction_10m_dominant']}°, "
+            f"City: {row['city']}, "
+            f"Lagged: {row['lagged']}, "
+            f"Predicted PM2.5: {row['predicted_pm25']}µg/m³, "
+            f"Street: {row['street']}, "
+            f"Country: {row['country']}, "
+            # f"Days Before Forecast: {row['days_before_forecast_day']}"
+        )
+        formatted_rows.append(formatted_row)
+    return "\n".join(formatted_rows)
+
 
 def respond(
     message,
@@ -59,21 +84,12 @@ def respond(
     max_tokens,
     temperature,
     top_p,
-    repeat_penalty
+    repeat_penalty,
+    backfill_days
 ):
-    # Extract date from the message (assuming the date is provided in the message)
-    import re
-    date_match = re.search(r'\d{4}-\d{2}-\d{2}', message)
-    if date_match:
-        print("Matched date:", date_match.group(0))
-        date = date_match.group(0)
-        aq_prediction = get_aq_prediction(date)
-        system_message += f"\nYou are helping users to retrieve air quality information. You were asked about the air quality prediction for {date}. Do not tell the user to look for the data elsewhere"
-        if aq_prediction:
-            print("Air quality prediction for", date, ":", aq_prediction)
-            system_message += f"\nRespond with a friendly answer that the air quality prediction in terms of PM2.5 value for Reutlingen, Germany on {date} was: {aq_prediction}"
-        else:
-            system_message += f"\nRespond with a friendly answer that there is no data for {date}"
+    aq_prediction = get_aq_predictions(backfill_days)
+    system_message += f"\nAttached is the air quality prediction data was retrieved from a feature store. Answer any questions about this data helpfully: \n{format_predictions_for_llm(aq_prediction)}"
+
 
     messages = [{"role": "system", "content": system_message}]
 
@@ -84,8 +100,6 @@ def respond(
             messages.append({"role": "assistant", "content": val[1]})
 
     messages.append({"role": "user", "content": message})
-
-    # print("Messages:", messages)
 
     if model_type == "local":
         text_streamer  = model.create_chat_completion(
@@ -142,6 +156,13 @@ demo = gr.ChatInterface(
             step=0.1,
             label="Repeat penalty",
         ),
+        gr.Slider(
+            minimum=1,
+            maximum=30,
+            value=1,
+            step=1,
+            label="Backfill days"
+        )
     ],
 )
 
