@@ -27,11 +27,12 @@ def load_context():
 
 
 # Init first model option: OpenAI API client for deployment running on modal with GPU
-model_name_1 = "llama-3.2-1b-instruct-lora-1poch_merged16b"
 client = OpenAI(
     base_url=model_api_url,
     api_key=model_api_key
 )
+remote_models = client.models.list()
+model_name_1 = remote_models.data[0].id
 
 # Init second model option: Running it locally with CPU
 model_name_2 = "Taiwar/llama-3.2-1b-instruct-lora_model-1epoch"
@@ -154,7 +155,7 @@ demo = gr.ChatInterface(
     respond,
     additional_inputs=[
         gr.Dropdown(
-            choices=["local", "remote"],
+            choices=[f"local {model_name_2}", f"remote {model_name_1}"],
             value="local",
             label="Model type"
         ),
