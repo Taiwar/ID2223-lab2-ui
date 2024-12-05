@@ -44,9 +44,12 @@ model = Llama.from_pretrained(
     # chat_format="llama-3"
 )
 
-project = hopsworks.login()
-fs = project.get_feature_store()
-predictions_fg = fs.get_feature_group("aq_predictions")
+if do_hw_query:
+    project = hopsworks.login()
+    fs = project.get_feature_store()
+    predictions_fg = fs.get_feature_group("aq_predictions")
+else:
+    predictions_fg = None
 
 cache = {}
 
@@ -56,6 +59,8 @@ def get_aq_predictions(backfill_days):
     backfill_day = today - pd.Timedelta(days=backfill_days)
     if backfill_day in cache:
         return cache[backfill_day]
+    if predictions_fg is None:
+        return load_context()
     predictions_df = predictions_fg.filter(predictions_fg.date >= backfill_day).read()
     # For each date, there are multiple predictions. We only want the most recent one (lowest days_before_forecast_day)
     predictions_df = predictions_df.sort_values("days_before_forecast_day").groupby("date").first().reset_index()
